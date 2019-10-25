@@ -29,6 +29,7 @@ BTN_LEFT = 4
 BTN_UP = 17
 BTN_RIGHT = 27
 BTN_DOWN = 22
+BTN_SELECT = 23
 
 def fixed_length(str, length):
   'Truncate and pad str to length'
@@ -105,7 +106,7 @@ class App:
     self.selected = 0
 
     #SETUP GPIOs
-    chan_list = [BTN_LEFT, BTN_UP, BTN_RIGHT, BTN_DOWN]    
+    chan_list = [BTN_LEFT, BTN_UP, BTN_RIGHT, BTN_DOWN, BTN_SELECT]
     GPIO.setup(chan_list, GPIO.IN)
 
   def display(self):
@@ -119,6 +120,7 @@ class App:
       print('------------------')
 
     str = ''
+    lines = []
     for row in range(self.top, self.top + self.ROWS):
       if row > self.top:
         str += '\n'
@@ -129,6 +131,7 @@ class App:
           line = ' '
 
         line = fixed_length("%s%s" % (line, self.folder.items[row].text), self.COLS)
+        lines.append(line)
         str += line
 
         if DEBUG:
@@ -138,7 +141,8 @@ class App:
       print('------------------')
 
     self.lcd.home()
-    self.lcd.display_string(str, 1)
+    self.lcd.display_string(lines[0], 1)
+    self.lcd.display_string(lines[1], 2)
 
 
   def up(self):
@@ -270,8 +274,9 @@ class App:
           self.display()
 
         #if (self.lcd.buttonPressed(self.lcd.SELECT)):
-        #  self.select()
-        #  self.display()
+        if(GPIO.input(BTN_SELECT)):
+            self.select()
+            self.display()
 
       except FinishException:
         return
@@ -332,9 +337,9 @@ class Playlist(Applet):
       #(self.command('mpc -f %title% current')[0]).decode('utf-8'),
     )
 
-    self.volume = int(re.search(r'\d+',
-      self.command('mpc volume').decode('utf-8')
-    ).group())
+    #self.volume = int(re.search(r'\d+',
+    #  self.command('mpc volume').decode('utf-8')
+    #).group())
 
     self.dir = 'L'
     self.shift = 0
@@ -359,7 +364,8 @@ class Playlist(Applet):
       print('------------------')
 
     self.lcd.home()
-    self.lcd.display_string(str, 1)
+    self.lcd.display_string(self.lines[0], 1)
+    self.lcd.display_string(self.lines[1], 2)
 
     if self.dir == 'L':
       if self.shift + self.COLS < len(self.lines[1]):
