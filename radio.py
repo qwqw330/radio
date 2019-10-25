@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 #
 # A simple internet radio for RaspberryPI
@@ -12,13 +12,23 @@
 import signal
 import sys
 
-from Adafruit_CharLCDPlate import Adafruit_CharLCDPlate
+# from Adafruit_CharLCDPlate import Adafruit_CharLCDPlate
+import lcddriver
+import RPi.GPIO as GPIO
 import re
 import shlex, subprocess
 from time import strftime, sleep
 from unidecode import unidecode
 
 DEBUG = False
+
+GPIO.setmode(GPIO.BCM) # USE BCM Numbering
+
+## These are BCM pin numbers for the buttons
+BTN_LEFT = 4
+BTN_UP = 17
+BTN_RIGHT = 27
+BTN_DOWN = 22
 
 def fixed_length(str, length):
   'Truncate and pad str to length'
@@ -47,7 +57,7 @@ class Timer(Node):
     self.parent = None
   
   def gettext(self):
-    print "TT"
+    print("TT")
     return strftime('%H:%M:%S %d.%m')
 
   text = property(gettext)
@@ -71,9 +81,9 @@ class Playlists(Folder):
     self.radio = radio
 
   def into(self):
-    print "into", repr(self)
+    print("into", repr(self))
     self.setItems([
-      Playlist(playlist, self.radio) for playlist in self.radio.command('mpc lsplaylists')
+      Playlist(playlist, self.radio) for playlist in self.radio.command('mpc lsplaylists').decode('utf-8').split('\n')
     ])
 
 
@@ -94,6 +104,10 @@ class App:
     self.top = 0
     self.selected = 0
 
+    #SETUP GPIOs
+    chan_list = [BTN_LEFT, BTN_UP, BTN_RIGHT, BTN_DOWN]    
+    GPIO.setup(chan_list, GPIO.IN)
+
   def display(self):
     if self.top > len(self.folder.items) - self.ROWS:
       self.top = len(self.folder.items) - self.ROWS
@@ -102,7 +116,7 @@ class App:
       self.top = 0
 
     if DEBUG:
-      print '------------------'
+      print('------------------')
 
     str = ''
     for row in range(self.top, self.top + self.ROWS):
@@ -114,17 +128,17 @@ class App:
         else:
           line = ' '
 
-        line = fixed_length(line + self.folder.items[row].text, self.COLS)
+        line = fixed_length("%s%s" % (line, self.folder.items[row].text), self.COLS)
         str += line
 
         if DEBUG:
           print('|' + line + '|')
 
     if DEBUG:
-      print '------------------'
+      print('------------------')
 
     self.lcd.home()
-    self.lcd.message(str)
+    self.lcd.display_string(str, 1)
 
 
   def up(self):
@@ -157,7 +171,7 @@ class App:
     for item in self.folder.parent.items:
       if self.folder == item:
         if DEBUG:
-          print 'foundit:', item
+          print('foundit:', item)
         index = itemno
       else:
           itemno += 1
@@ -187,12 +201,13 @@ class App:
 
 
   def command(self, cmd):
-    print shlex.split(cmd)
+    print(shlex.split(cmd))
     result = subprocess.check_output(
       shlex.split(cmd), stderr=subprocess.STDOUT
     )
-    result = result.rstrip().split('\n')
-    print cmd, '-->', result
+    print(result.rstrip())
+    result = result.rstrip()
+    print(cmd, '-->', result)
     return result
 
 
@@ -206,7 +221,8 @@ class App:
 
   def handlesignal(self, signum, frame):
     self.lcd.clear()
-    self.lcd.backlight(Adafruit_CharLCDPlate.OFF)
+    #self.lcd.backlight(Adafruit_CharLCDPlate.OFF)
+    self.lcd.backlight_off()
     sys.exit(0)
 
   def run(self):
@@ -227,31 +243,35 @@ class App:
       self.ticks += 1
       sleep(0.1)
 
-      buttons = self.lcd.buttons()
-      if last_buttons == buttons:
-        continue
-      last_buttons = buttons
+      # buttons = self.lcd.buttons()
+      # if last_buttons == buttons:
+      #   continue
+      # last_buttons = buttons
 
       try:
-        if (self.lcd.buttonPressed(self.lcd.LEFT)):
+        #if (self.lcd.buttonPressed(self.lcd.LEFT)):
+        if(GPIO.input(BTN_LEFT)):
           self.left()
           self.display()
 
-        if (self.lcd.buttonPressed(self.lcd.UP)):
+        #if (self.lcd.buttonPressed(self.lcd.UP)):
+        if(GPIO.input(BTN_UP)):
           self.up()
           self.display()
 
-        if (self.lcd.buttonPressed(self.lcd.DOWN)):
+        #if (self.lcd.buttonPressed(self.lcd.DOWN)):
+        if(GPIO.input(BTN_DOWN)):
           self.down()
           self.display()
 
-        if (self.lcd.buttonPressed(self.lcd.RIGHT)):
+        #if (self.lcd.buttonPressed(self.lcd.RIGHT)):
+        if(GPIO.input(BTN_RIGHT)):
           self.right()
           self.display()
 
-        if (self.lcd.buttonPressed(self.lcd.SELECT)):
-          self.select()
-          self.display()
+        #if (self.lcd.buttonPressed(self.lcd.SELECT)):
+        #  self.select()
+        #  self.display()
 
       except FinishException:
         return
@@ -264,7 +284,7 @@ class Radio(App):
     self.command('mpc stop')
 
     App.__init__(self,
-      Adafruit_CharLCDPlate(),
+      lcddriver.lcd(),
       Folder('Pauls iRadio', (
         Playlists(self),
         Folder('Settings', (
@@ -306,12 +326,14 @@ class Playlist(Applet):
 
   def display(self):
     self.lines = (
-      unidecode(self.command('mpc -f %name% current')[0].split(',', 1)[0]),
-      unidecode(self.command('mpc -f %title% current')[0]),
+      (self.command('mpc -f %name% current')).decode('utf-8'),
+      (self.command('mpc -f %title% current')).decode('utf-8'),
+      #(self.command('mpc -f %name% current')[0].split(',', 1)[0]).decode('utf-8'),
+      #(self.command('mpc -f %title% current')[0]).decode('utf-8'),
     )
 
     self.volume = int(re.search(r'\d+',
-      self.command('mpc volume')[0]
+      self.command('mpc volume').decode('utf-8')
     ).group())
 
     self.dir = 'L'
@@ -331,13 +353,13 @@ class Playlist(Applet):
     str += fixed_length(self.lines[0], self.COLS)
     str += '\n' + fixed_length(self.lines[1][self.shift:], self.COLS)
     if DEBUG:
-      print '------------------'
+      print('------------------')
       for line in str.split('\n'):
-        print '|' + line + '|'
-      print '------------------'
+        print('|' + line + '|')
+      print('------------------')
 
     self.lcd.home()
-    self.lcd.message(str)
+    self.lcd.display_string(str, 1)
 
     if self.dir == 'L':
       if self.shift + self.COLS < len(self.lines[1]):
@@ -353,7 +375,9 @@ class Playlist(Applet):
 
   def run(self):
     self.command('mpc clear')
-    self.command('mpc load ' + self.text)
+    load = 'mpc load %s' % self.text
+    print(load)
+    self.command('mpc load %s' % self.text)
     self.command('mpc play')
 
     Applet.run(self)
