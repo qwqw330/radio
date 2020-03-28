@@ -7,8 +7,10 @@ http://tinkerthon.de/2013/04/internet-radio-mit-raspberrypi-2-zeiligem-rgb-lcd-u
 
 
 ### dependencies for python3
+```
    59  git clone https://github.com/qwqw330/radio.git
    60  cd radio/
    68  sudo apt install python3-pip python3-smbus
    70  sudo pip3 install RPi.GPIO
    72  sudo apt install python3-unidecode
+```
